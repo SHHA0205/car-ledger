@@ -11,6 +11,27 @@ const MAINT_LABELS = {
 
 const FUEL_LABELS = { B027: '휘발유', D047: '경유' };
 
+const REGION_CENTERS = {
+  '01': { x: 309945, y: 552095, name: '서울' },
+  '02': { x: 291488, y: 529766, name: '경기' },
+  '03': { x: 336182, y: 512820, name: '강원' },
+  '04': { x: 327264, y: 488184, name: '충북' },
+  '05': { x: 305058, y: 445662, name: '충남' },
+  '06': { x: 275126, y: 401734, name: '전북' },
+  '08': { x: 370164, y: 401734, name: '경북' },
+  '09': { x: 360692, y: 339713, name: '경남' },
+  '10': { x: 387644, y: 186792, name: '부산' },
+  '11': { x: 168907, y: 152050, name: '제주' },
+  '14': { x: 370164, y: 258912, name: '대구' },
+  '15': { x: 285177, y: 451932, name: '인천' },
+  '17': { x: 305058, y: 445662, name: '대전' },
+  '18': { x: 412421, y: 258912, name: '울산' },
+  '19': { x: 316230, y: 468454, name: '세종' },
+  '20': { x: 275126, y: 339713, name: '전남/광주' },
+};
+
+let opinetReady = false;
+
 let state = loadData();
 let selectedStation = null;
 let selectedFuelType = 'B027';
@@ -95,11 +116,39 @@ function showToast(msg, isError = false) {
   showToast._t = setTimeout(() => el.classList.add('hidden'), 2500);
 }
 
+async function checkOpinetReady() {
+  try {
+    const res = await fetch('/api/opinet/status');
+    const data = await res.json();
+    opinetReady = Boolean(state.settings.apiKey) || data.configured;
+    const hint = document.getElementById('fuel-api-hint');
+    if (hint) {
+      if (opinetReady) {
+        hint.textContent = '📍 내 주변 또는 지역 검색 후 이름으로 필터할 수 있습니다.';
+      } else {
+        hint.innerHTML = '⚠️ <a href="https://www.opinet.co.kr/user/custapi/openApiNew.do" target="_blank" rel="noopener">오피넷</a> API 키를 설정 탭에 입력해야 검색이 됩니다.';
+      }
+    }
+    return opinetReady;
+  } catch {
+    opinetReady = Boolean(state.settings.apiKey);
+    return opinetReady;
+  }
+}
+
 async function opinetFetch(endpoint, params = {}) {
   const key = state.settings.apiKey;
-  if (!key) throw new Error('오피넷 API 키를 설정에서 입력해주세요.');
+  if (!key && !opinetReady) {
+    const ready = await checkOpinetReady();
+    if (!ready) throw new Error('오피넷 API 키를 설정에서 입력해주세요.');
+  }
 
-  const qs = new URLSearchParams({ ...params, certkey: key });
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  });
+  if (key) qs.set('certkey', key);
+
   const res = await fetch(`/api/opinet/${endpoint}?${qs}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'API 요청 실패');
@@ -108,11 +157,17 @@ async function opinetFetch(endpoint, params = {}) {
 
 function parseOilList(data) {
   if (!data) return [];
-  if (Array.isArray(data.RESULT?.OIL)) return data.RESULT.OIL;
-  if (data.RESULT?.OIL) return [data.RESULT.OIL];
-  if (Array.isArray(data.OIL)) return data.OIL;
-  if (data.OIL) return [data.OIL];
-  return [];
+  const oil = data.RESULT?.OIL ?? data.OIL;
+  if (!oil) return [];
+  return Array.isArray(oil) ? oil : [oil];
+}
+
+function mergeStations(...lists) {
+  const map = new Map();
+  lists.flat().forEach((s) => {
+    if (s?.UNI_ID) map.set(s.UNI_ID, s);
+  });
+  return Array.from(map.values());
 }
 
 function parsePrices(data) {
@@ -148,6 +203,7 @@ function switchPage(pageId) {
 
   if (pageId === 'home') renderHome();
   if (pageId === 'history') renderHistory();
+  if (pageId === 'fuel') checkOpinetReady();
 }
 
 document.querySelectorAll('.nav-item').forEach((btn) => {
@@ -156,9 +212,18 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
 
 // --- Station search ---
 
+async function loadStationsAround(x, y, radius = 5000) {
+  const data = await opinetFetch('aroundAll', {
+    x, y, radius, prodcd: 'B027', sort: 1,
+  });
+  return parseOilList(data);
+}
+
 async function searchNearbyStations() {
+  if (!await checkOpinetReady()) return;
+
   if (!navigator.geolocation) {
-    showToast('위치 정보를 사용할 수 없습니다.', true);
+    showToast('위치 정보를 사용할 수 없습니다. 지역 검색을 이용하세요.', true);
     return;
   }
 
@@ -168,19 +233,53 @@ async function searchNearbyStations() {
     async (pos) => {
       try {
         const { x, y } = wgs84ToKatec(pos.coords.latitude, pos.coords.longitude);
-        const data = await opinetFetch('aroundAll', {
-          x, y, radius: 3000, prodcd: 'B027', sort: 1,
-        });
-        nearbyStations = parseOilList(data);
+        nearbyStations = await loadStationsAround(x, y, 5000);
         renderStationResults(document.getElementById('station-search').value);
-        showToast(`${nearbyStations.length}개 주유소를 찾았습니다.`);
+        if (nearbyStations.length === 0) {
+          showToast('주변에 주유소가 없습니다. 지역 검색을 시도해보세요.', true);
+        } else {
+          showToast(`${nearbyStations.length}개 주유소를 찾았습니다.`);
+        }
       } catch (err) {
         showToast(err.message, true);
       }
     },
-    () => showToast('위치 권한이 필요합니다.', true),
-    { enableHighAccuracy: true, timeout: 10000 }
+    (err) => {
+      const msgs = {
+        1: '위치 권한이 거부되었습니다. 지역 검색을 이용하세요.',
+        2: '위치를 확인할 수 없습니다. 지역 검색을 이용하세요.',
+        3: '위치 요청 시간이 초과되었습니다.',
+      };
+      showToast(msgs[err.code] || '위치 권한이 필요합니다.', true);
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
   );
+}
+
+async function searchByRegion() {
+  if (!await checkOpinetReady()) return;
+
+  const area = document.getElementById('region-select').value;
+  if (!area) return showToast('지역을 선택해주세요.', true);
+
+  const center = REGION_CENTERS[area];
+  showToast(`${center.name} 주유소 검색 중...`);
+
+  try {
+    const [around, low] = await Promise.all([
+      loadStationsAround(center.x, center.y, 10000),
+      opinetFetch('lowTop10', { area, prodcd: 'B027', cnt: 20 }).then(parseOilList),
+    ]);
+    nearbyStations = mergeStations(around, low);
+    renderStationResults(document.getElementById('station-search').value);
+    if (nearbyStations.length === 0) {
+      showToast('해당 지역 주유소를 찾지 못했습니다.', true);
+    } else {
+      showToast(`${nearbyStations.length}개 주유소를 불러왔습니다.`);
+    }
+  } catch (err) {
+    showToast(err.message, true);
+  }
 }
 
 function renderStationResults(query = '') {
@@ -252,6 +351,7 @@ function esc(str) {
 }
 
 document.getElementById('btn-nearby').addEventListener('click', searchNearbyStations);
+document.getElementById('btn-region').addEventListener('click', searchByRegion);
 
 let searchTimer;
 document.getElementById('station-search').addEventListener('input', (e) => {
@@ -259,6 +359,8 @@ document.getElementById('station-search').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => {
     if (nearbyStations.length > 0) {
       renderStationResults(e.target.value);
+    } else if (e.target.value.trim()) {
+      showToast('먼저 📍 또는 🔍 로 주유소 목록을 불러오세요.', true);
     }
   }, 200);
 });
@@ -630,10 +732,11 @@ document.getElementById('history-filter').addEventListener('change', renderHisto
 
 document.getElementById('api-key').value = state.settings.apiKey || '';
 
-document.getElementById('btn-save-key').addEventListener('click', () => {
+document.getElementById('btn-save-key').addEventListener('click', async () => {
   state.settings.apiKey = document.getElementById('api-key').value.trim();
   state.settingsUpdatedAt = new Date().toISOString();
   saveData();
+  await checkOpinetReady();
   showToast('API 키가 저장되었습니다.');
 });
 
@@ -666,6 +769,7 @@ document.getElementById('maint-date').value = today();
 document.getElementById('history-month').value = currentMonth();
 document.getElementById('api-key').value = state.settings.apiKey || '';
 renderHome();
+checkOpinetReady();
 
 window.addEventListener('load', () => {
   if (window.Sync) window.Sync.init();

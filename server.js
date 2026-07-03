@@ -16,10 +16,10 @@ const {
   authMiddleware,
 } = require('./lib/auth');
 const { mergeSyncData } = require('./lib/merge');
+const { fetchOpinet } = require('./lib/opinet');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
-const OPINET_BASE = 'https://www.opinet.co.kr/api';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
 
@@ -31,31 +31,8 @@ if (!fs.existsSync(INDEX_FILE)) {
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR));
 
-async function fetchOpinet(endpoint, params) {
-  const url = new URL(`${OPINET_BASE}/${endpoint}`);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      url.searchParams.set(key, String(value));
-    }
-  });
-
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(`오피넷 API 오류 (${response.status})`);
-  }
-
-  const text = await response.text();
-  const contentType = response.headers.get('content-type') || '';
-
-  if (contentType.includes('json') || params.out === 'json') {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { raw: text };
-    }
-  }
-
-  return { raw: text, format: 'xml' };
+function resolveOpinetKey(queryKey) {
+  return queryKey || process.env.OPINET_API_KEY || '';
 }
 
 // --- Auth ---
@@ -149,13 +126,22 @@ app.post('/api/sync', authMiddleware, (req, res) => {
 
 // --- Opinet proxy ---
 
+app.get('/api/opinet/status', (_req, res) => {
+  res.json({
+    configured: Boolean(process.env.OPINET_API_KEY),
+    message: process.env.OPINET_API_KEY
+      ? '서버에 오피넷 키가 설정되어 있습니다.'
+      : '설정 탭에서 오피넷 API 키를 입력해주세요.',
+  });
+});
+
 app.get('/api/opinet/:endpoint', async (req, res) => {
   const { endpoint } = req.params;
-  const certkey = req.query.certkey || process.env.OPINET_API_KEY;
+  const certkey = resolveOpinetKey(req.query.certkey);
 
   if (!certkey) {
     return res.status(400).json({
-      error: '오피넷 API 인증키가 필요합니다. 설정에서 키를 입력하세요.',
+      error: '오피넷 API 인증키가 필요합니다. 설정에서 키를 입력하거나 Render에 OPINET_API_KEY를 등록하세요.',
     });
   }
 
@@ -165,8 +151,8 @@ app.get('/api/opinet/:endpoint', async (req, res) => {
   }
 
   try {
-    const params = { ...req.query, certkey, out: req.query.out || 'json' };
-    const data = await fetchOpinet(`${endpoint}.do`, params);
+    const { certkey: _ck, ...rest } = req.query;
+    const data = await fetchOpinet(endpoint, { ...rest, certkey });
     res.json(data);
   } catch (err) {
     res.status(502).json({ error: err.message || 'API 요청 실패' });

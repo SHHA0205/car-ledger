@@ -68,10 +68,34 @@
           <label class="field-label">날짜</label>
           <input type="date" id="fuel-date" class="field-input">
 
+          <p class="hint" id="fuel-api-hint"></p>
           <label class="field-label">주유소 검색</label>
           <div class="search-row">
-            <input type="search" id="station-search" class="field-input" placeholder="주유소 이름 검색" autocomplete="off">
+            <input type="search" id="station-search" class="field-input" placeholder="주유소 이름으로 필터" autocomplete="off">
             <button type="button" class="btn-icon" id="btn-nearby" title="내 주변">📍</button>
+          </div>
+          <label class="field-label">또는 지역으로 검색</label>
+          <div class="search-row">
+            <select id="region-select" class="field-input">
+              <option value="">지역 선택</option>
+              <option value="01">서울</option>
+              <option value="02">경기</option>
+              <option value="15">인천</option>
+              <option value="03">강원</option>
+              <option value="04">충북</option>
+              <option value="05">충남</option>
+              <option value="19">세종</option>
+              <option value="17">대전</option>
+              <option value="06">전북</option>
+              <option value="20">전남/광주</option>
+              <option value="08">경북</option>
+              <option value="14">대구</option>
+              <option value="09">경남</option>
+              <option value="10">부산</option>
+              <option value="18">울산</option>
+              <option value="11">제주</option>
+            </select>
+            <button type="button" class="btn-icon" id="btn-region" title="지역 검색">🔍</button>
           </div>
           <div id="station-results" class="station-results hidden"></div>
 

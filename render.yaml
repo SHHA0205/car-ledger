@@ -13,3 +13,5 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+      - key: OPINET_API_KEY
+        sync: false
