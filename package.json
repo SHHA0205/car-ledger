@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "lan": "powershell -ExecutionPolicy Bypass -File scripts/start-lan.ps1",
+    "tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-tunnel.ps1"
   },
   "engines": {
     "node": ">=18"

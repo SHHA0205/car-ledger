@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const {
   findUserByEmail,
@@ -19,9 +20,16 @@ const { mergeSyncData } = require('./lib/merge');
 const app = express();
 const PORT = process.env.PORT || 3456;
 const OPINET_BASE = 'https://www.opinet.co.kr/api';
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
+
+if (!fs.existsSync(INDEX_FILE)) {
+  console.error('FATAL: index.html 없음 →', INDEX_FILE);
+  process.exit(1);
+}
 
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(PUBLIC_DIR));
 
 async function fetchOpinet(endpoint, params) {
   const url = new URL(`${OPINET_BASE}/${endpoint}`);
@@ -166,13 +174,30 @@ app.get('/api/opinet/:endpoint', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'car-ledger' });
+  res.json({ ok: true, service: 'car-ledger', dataDir: process.env.DATA_DIR || 'default' });
 });
 
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/', (_req, res) => {
+  res.sendFile(INDEX_FILE);
+});
+
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API not found' });
+  }
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    return res.sendFile(INDEX_FILE, (err) => {
+      if (err) next(err);
+    });
+  }
+  return res.status(404).json({ error: 'Not found' });
+});
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).send('Server error');
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`차계부 서버 실행 중 (port ${PORT})`);
+  console.log(`차계부 서버 실행 중 (port ${PORT}, env=${process.env.NODE_ENV || 'dev'})`);
 });

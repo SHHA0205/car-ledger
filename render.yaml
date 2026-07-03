@@ -1,10 +1,10 @@
-# Render Blueprint: GitHub 연결 후 "New > Blueprint"로 배포
+# Render Blueprint — Free 플랜 (결제 없이 배포 가능)
 services:
   - type: web
     name: car-ledger
     runtime: node
     region: singapore
-    plan: starter
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
@@ -13,9 +13,3 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
-      - key: DATA_DIR
-        value: /var/data
-    disk:
-      name: car-ledger-data
-      mountPath: /var/data
-      sizeGB: 1

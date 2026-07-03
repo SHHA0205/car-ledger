@@ -11,6 +11,39 @@ npm start
 
 http://localhost:3456
 
+## 개인 온라인 사용 (배포 없이)
+
+Render/GitHub 없이 **내 PC가 서버**가 됩니다. 클라우드 동기화·유가 조회 모두 이 PC에서 동작합니다.
+
+### 방법 1 — 집 Wi-Fi (가장 간단)
+
+```powershell
+npm run lan
+```
+
+표시되는 `http://192.168.x.x:3456` 주소를 **같은 Wi-Fi**에 연결된 폰 브라우저에 입력합니다.
+
+### 방법 2 — 외부에서도 접속 (임시 비공개 URL)
+
+```powershell
+npm run tunnel
+```
+
+`your url is: https://xxxx.loca.lt` 주소가 나옵니다. **본인만 아는 URL**이므로 북마크해 두고 사용하세요. PC를 끄거나 스크립트를 종료하면 접속이 끊깁니다.
+
+> 첫 접속 시 localtunnel 비밀번호 안내가 나올 수 있습니다. 터미널에 표시된 공인 IP를 입력하면 됩니다.
+
+### 클라우드 동기화 (개인 서버)
+
+1. PC에서 `npm run lan` 또는 `npm run tunnel` 실행
+2. 폰·태블릿에서 **같은 주소**로 접속
+3. 설정 → 회원가입 (데이터는 PC의 `data/` 폴더에 저장)
+4. 다른 기기에서도 **같은 주소 + 같은 계정**으로 로그인
+
+### 데이터 저장 위치
+
+`C:\Users\KR\projects\car-ledger\data\` — 내 PC에만 보관됩니다.
+
 ## GitHub 업로드
 
 ```bash
@@ -47,7 +80,16 @@ git push -u origin main
    - Mount Path: `/var/data`
    - Size: 1 GB
 
-> 클라우드 동기화 데이터를 유지하려면 Persistent Disk가 필요합니다. `render.yaml`은 Starter 플랜 + Disk 기준입니다.
+### Render "Not Found" 해결
+
+1. **정확한 URL 확인** — Render 대시보드 → 서비스 → 우측 상단 URL 복사 (`https://car-ledger.onrender.com` 형태, `xxxx`는 예시)
+2. **배포 상태** — Events 탭에서 Latest Deploy가 **Live** 인지 확인
+3. **로그 확인** — Logs 탭에 `차계부 서버 실행 중` 메시지가 있는지 확인
+4. **헬스체크** — `https://<서비스URL>/api/health` 접속 시 `{"ok":true}` 나와야 함
+5. **무료 플랜** — 15분 미사용 시 슬립 → 첫 접속 30~50초 대기 후 새로고침
+6. **코드 push** — 수정 후 GitHub에 push하면 Render가 자동 재배포
+
+> Free 플랜은 재배포 시 동기화 데이터가 초기화될 수 있습니다. 영구 보관이 필요하면 Starter + Disk를 추가하세요.
 
 ## 환경 변수
 
