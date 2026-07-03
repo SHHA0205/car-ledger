@@ -2,6 +2,32 @@
 
 모바일 차계부 웹앱 — 주유 실시간 유가, 정비 기록, 운행거리, 클라우드 동기화.
 
+## GitHub + Render 온라인 사용
+
+| 항목 | 주소 |
+|------|------|
+| **앱 (모바일 접속)** | https://car-ledger.onrender.com |
+| **GitHub 저장소** | https://github.com/SHHA0205/car-ledger |
+| **상태 확인** | https://car-ledger.onrender.com/api/health |
+
+### 모바일에서 쓰는 법
+
+1. 폰 브라우저에서 **https://car-ledger.onrender.com** 접속
+2. 첫 접속은 Free 플랜 슬립 해제로 **30~50초** 걸릴 수 있음 → 로딩 후 새로고침
+3. **설정** → **회원가입** (한 번만)
+4. 주유·정비 기록 입력 → 자동 클라우드 저장
+5. 다른 기기에서도 **같은 URL + 같은 계정**으로 로그인
+
+### 코드 수정 후 반영
+
+```bash
+git add .
+git commit -m "변경 내용"
+git push origin main
+```
+
+GitHub에 push하면 Render가 **자동 재배포**합니다 (Events 탭에서 Live 확인).
+
 ## 로컬 실행
 
 ```bash
