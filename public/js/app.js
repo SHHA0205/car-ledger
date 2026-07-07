@@ -120,10 +120,13 @@ async function checkOpinetReady() {
   try {
     const res = await fetch('/api/opinet/status');
     const data = await res.json();
-    opinetReady = Boolean(state.settings.apiKey) || data.configured;
+    const hasClientKey = Boolean((state.settings.apiKey || '').trim());
+    opinetReady = hasClientKey || (data.configured && data.valid !== false);
     const hint = document.getElementById('fuel-api-hint');
     if (hint) {
-      if (opinetReady) {
+      if (data.configured && data.valid === false) {
+        hint.innerHTML = '⚠️ 서버 오피넷 API 키가 잘못되었습니다. Render의 <code>OPINET_API_KEY</code>를 확인하거나 <a href="https://www.opinet.co.kr/user/custapi/openApiNew.do" target="_blank" rel="noopener">오피넷</a>에서 새 키를 발급해 설정 탭에 입력하세요.';
+      } else if (opinetReady) {
         hint.textContent = '📍 내 주변 또는 지역 검색 후 이름으로 필터할 수 있습니다.';
       } else {
         hint.innerHTML = '⚠️ <a href="https://www.opinet.co.kr/user/custapi/openApiNew.do" target="_blank" rel="noopener">오피넷</a> API 키를 설정 탭에 입력해야 검색이 됩니다.';
@@ -131,13 +134,13 @@ async function checkOpinetReady() {
     }
     return opinetReady;
   } catch {
-    opinetReady = Boolean(state.settings.apiKey);
+    opinetReady = Boolean((state.settings.apiKey || '').trim());
     return opinetReady;
   }
 }
 
 async function opinetFetch(endpoint, params = {}) {
-  const key = state.settings.apiKey;
+  const key = (state.settings.apiKey || '').trim();
   if (!key && !opinetReady) {
     const ready = await checkOpinetReady();
     if (!ready) throw new Error('오피넷 API 키를 설정에서 입력해주세요.');
@@ -147,6 +150,7 @@ async function opinetFetch(endpoint, params = {}) {
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   });
+  // 서버 키가 있으면 certkey를 보내지 않음 (잘못된 클라이언트 키가 서버 키를 덮어쓰지 않도록)
   if (key) qs.set('certkey', key);
 
   const res = await fetch(`/api/opinet/${endpoint}?${qs}`);
@@ -270,10 +274,21 @@ async function searchByRegion() {
   if (!await checkOpinetReady()) return;
 
   const center = REGION_CENTERS[area];
+  if (!center) {
+    showToast('지원하지 않는 지역입니다.', true);
+    return;
+  }
+
   showToast(`${center.name} 주유소 목록 불러오는 중...`);
 
   try {
-    const data = await opinetFetch('lowTop10', { area, prodcd: 'B027', cnt: 20 });
+    const data = await opinetFetch('aroundAll', {
+      x: center.x,
+      y: center.y,
+      radius: 30000,
+      prodcd: 'B027',
+      sort: 1,
+    });
     nearbyStations = parseOilList(data).filter((s) => s.UNI_ID && s.OS_NM);
     document.getElementById('station-search').value = '';
     renderStationResults('');

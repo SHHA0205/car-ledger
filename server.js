@@ -32,7 +32,9 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR));
 
 function resolveOpinetKey(queryKey) {
-  return queryKey || process.env.OPINET_API_KEY || '';
+  const serverKey = (process.env.OPINET_API_KEY || '').trim();
+  const clientKey = (queryKey || '').trim();
+  return serverKey || clientKey;
 }
 
 // --- Auth ---
@@ -126,13 +128,35 @@ app.post('/api/sync', authMiddleware, (req, res) => {
 
 // --- Opinet proxy ---
 
-app.get('/api/opinet/status', (_req, res) => {
-  res.json({
-    configured: Boolean(process.env.OPINET_API_KEY),
-    message: process.env.OPINET_API_KEY
-      ? '서버에 오피넷 키가 설정되어 있습니다.'
-      : '설정 탭에서 오피넷 API 키를 입력해주세요.',
-  });
+app.get('/api/opinet/status', async (_req, res) => {
+  const hasServerKey = Boolean((process.env.OPINET_API_KEY || '').trim());
+
+  if (!hasServerKey) {
+    return res.json({
+      configured: false,
+      valid: false,
+      message: '설정 탭에서 오피넷 API 키를 입력하거나 Render에 OPINET_API_KEY를 등록하세요.',
+    });
+  }
+
+  try {
+    const data = await fetchOpinet('areaCode', { certkey: process.env.OPINET_API_KEY });
+    const areas = data.RESULT?.OIL || [];
+    const valid = Array.isArray(areas) && areas.length > 0;
+    res.json({
+      configured: true,
+      valid,
+      message: valid
+        ? '서버 오피넷 키가 정상 동작합니다.'
+        : '서버 오피넷 키가 등록되어 있지만 응답이 비어 있습니다. Render 환경변수 OPINET_API_KEY를 다시 확인하세요.',
+    });
+  } catch (err) {
+    res.json({
+      configured: true,
+      valid: false,
+      message: err.message || '오피넷 API 키 검증 실패',
+    });
+  }
 });
 
 app.get('/api/opinet/:endpoint', async (req, res) => {
