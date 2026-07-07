@@ -234,7 +234,9 @@ async function searchNearbyStations() {
       try {
         const { x, y } = wgs84ToKatec(pos.coords.latitude, pos.coords.longitude);
         nearbyStations = await loadStationsAround(x, y, 5000);
-        renderStationResults(document.getElementById('station-search').value);
+        document.getElementById('region-select').value = '';
+        document.getElementById('station-search').value = '';
+        renderStationResults('');
         if (nearbyStations.length === 0) {
           showToast('주변에 주유소가 없습니다. 지역 검색을 시도해보세요.', true);
         } else {
@@ -257,34 +259,42 @@ async function searchNearbyStations() {
 }
 
 async function searchByRegion() {
+  const area = document.getElementById('region-select').value;
+
+  if (!area) {
+    nearbyStations = [];
+    renderStationResults('');
+    return;
+  }
+
   if (!await checkOpinetReady()) return;
 
-  const area = document.getElementById('region-select').value;
-  if (!area) return showToast('지역을 선택해주세요.', true);
-
   const center = REGION_CENTERS[area];
-  showToast(`${center.name} 주유소 검색 중...`);
+  showToast(`${center.name} 주유소 목록 불러오는 중...`);
 
   try {
-    const [around, low] = await Promise.all([
-      loadStationsAround(center.x, center.y, 10000),
-      opinetFetch('lowTop10', { area, prodcd: 'B027', cnt: 20 }).then(parseOilList),
-    ]);
-    nearbyStations = mergeStations(around, low);
-    renderStationResults(document.getElementById('station-search').value);
+    const data = await opinetFetch('lowTop10', { area, prodcd: 'B027', cnt: 20 });
+    nearbyStations = parseOilList(data).filter((s) => s.UNI_ID && s.OS_NM);
+    document.getElementById('station-search').value = '';
+    renderStationResults('');
+
     if (nearbyStations.length === 0) {
       showToast('해당 지역 주유소를 찾지 못했습니다.', true);
     } else {
-      showToast(`${nearbyStations.length}개 주유소를 불러왔습니다.`);
+      showToast(`${nearbyStations.length}개 주유소 — 목록에서 선택하세요.`);
     }
   } catch (err) {
+    nearbyStations = [];
+    renderStationResults('');
     showToast(err.message, true);
   }
 }
 
 function renderStationResults(query = '') {
   const container = document.getElementById('station-results');
+  const countEl = document.getElementById('station-count');
   const q = query.trim().toLowerCase();
+  const area = document.getElementById('region-select').value;
 
   const filtered = nearbyStations.filter((s) => {
     if (!q) return true;
@@ -293,20 +303,32 @@ function renderStationResults(query = '') {
     return name.includes(q) || addr.includes(q);
   });
 
+  if (countEl) {
+    countEl.textContent = filtered.length > 0 ? `(${filtered.length}곳)` : '';
+  }
+
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="empty-state">검색 결과가 없습니다.<br>📍 버튼으로 주변 검색을 먼저 해주세요.</div>';
-    container.classList.remove('hidden');
+    const emptyMsg = area
+      ? (q ? '검색어와 일치하는 주유소가 없습니다.' : '주유소 목록을 불러오지 못했습니다.')
+      : '지역을 선택하면 주유소 목록이 표시됩니다.';
+    container.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
     return;
   }
 
-  container.innerHTML = filtered.slice(0, 20).map((s) => `
-    <div class="station-item" data-id="${s.UNI_ID}">
-      <div class="station-item-name">${esc(s.OS_NM)}</div>
-      <div class="station-item-meta">${esc(s.NEW_ADR || s.VAN_ADR || '')} · ${s.DISTANCE ? Math.round(s.DISTANCE) + 'm' : ''}</div>
-    </div>
-  `).join('');
-
-  container.classList.remove('hidden');
+  container.innerHTML = filtered.map((s) => {
+    const addr = s.NEW_ADR || s.VAN_ADR || '';
+    const price = s.PRICE ? `${Number(s.PRICE).toLocaleString()}원/L` : '';
+    const dist = s.DISTANCE ? `${Math.round(s.DISTANCE)}m` : '';
+    return `
+      <button type="button" class="station-item" data-id="${s.UNI_ID}">
+        <div class="station-item-top">
+          <div class="station-item-name">${esc(s.OS_NM)}</div>
+          ${price ? `<div class="station-item-price">${price}</div>` : ''}
+        </div>
+        <div class="station-item-meta">${esc(addr)}${dist ? ` · ${dist}` : ''}</div>
+      </button>
+    `;
+  }).join('');
 
   container.querySelectorAll('.station-item').forEach((el) => {
     el.addEventListener('click', () => selectStation(el.dataset.id));
@@ -317,10 +339,13 @@ async function selectStation(id) {
   try {
     showToast('유가 정보를 불러오는 중...');
     const data = await opinetFetch('detailById', { id });
-    const oil = data.RESULT?.OIL || data.OIL;
-    if (!oil) throw new Error('주유소 정보를 찾을 수 없습니다.');
+    const raw = data.RESULT?.OIL || data.OIL;
+    const oil = Array.isArray(raw) ? raw[0] : raw;
+    if (!oil?.UNI_ID) throw new Error('주유소 정보를 찾을 수 없습니다.');
 
-    const prices = parsePrices(data);
+    const prices = parsePrices({ RESULT: { OIL: oil } });
+    if (!prices.B027 && oil.PRICE) prices.B027 = Number(oil.PRICE);
+
     selectedStation = {
       id: oil.UNI_ID,
       name: oil.OS_NM,
@@ -336,7 +361,6 @@ async function selectStation(id) {
       prices.D047 ? prices.D047.toLocaleString() + '원/L' : '정보없음';
 
     document.getElementById('selected-station').classList.remove('hidden');
-    document.getElementById('station-results').classList.add('hidden');
     updateFuelCalc();
     showToast('주유소가 선택되었습니다.');
   } catch (err) {
@@ -351,18 +375,12 @@ function esc(str) {
 }
 
 document.getElementById('btn-nearby').addEventListener('click', searchNearbyStations);
-document.getElementById('btn-region').addEventListener('click', searchByRegion);
+document.getElementById('region-select').addEventListener('change', searchByRegion);
 
 let searchTimer;
 document.getElementById('station-search').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    if (nearbyStations.length > 0) {
-      renderStationResults(e.target.value);
-    } else if (e.target.value.trim()) {
-      showToast('먼저 📍 또는 🔍 로 주유소 목록을 불러오세요.', true);
-    }
-  }, 200);
+  searchTimer = setTimeout(() => renderStationResults(e.target.value), 150);
 });
 
 // --- Fuel type chips ---
@@ -772,5 +790,6 @@ renderHome();
 checkOpinetReady();
 
 window.addEventListener('load', () => {
+  if (typeof initKatecProj === 'function') initKatecProj();
   if (window.Sync) window.Sync.init();
 });

@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 </head>
 <body>
   <div id="app">
@@ -69,35 +70,35 @@
           <input type="date" id="fuel-date" class="field-input">
 
           <p class="hint" id="fuel-api-hint"></p>
-          <label class="field-label">주유소 검색</label>
-          <div class="search-row">
-            <input type="search" id="station-search" class="field-input" placeholder="주유소 이름으로 필터" autocomplete="off">
-            <button type="button" class="btn-icon" id="btn-nearby" title="내 주변">📍</button>
+
+          <label class="field-label">지역 선택</label>
+          <select id="region-select" class="field-input">
+            <option value="">지역을 선택하세요</option>
+            <option value="01">서울</option>
+            <option value="02">경기</option>
+            <option value="15">인천</option>
+            <option value="03">강원</option>
+            <option value="04">충북</option>
+            <option value="05">충남</option>
+            <option value="19">세종</option>
+            <option value="17">대전</option>
+            <option value="06">전북</option>
+            <option value="20">전남/광주</option>
+            <option value="08">경북</option>
+            <option value="14">대구</option>
+            <option value="09">경남</option>
+            <option value="10">부산</option>
+            <option value="18">울산</option>
+            <option value="11">제주</option>
+          </select>
+
+          <label class="field-label">주유소 목록 <span class="field-sublabel" id="station-count"></span></label>
+          <input type="search" id="station-search" class="field-input" placeholder="목록에서 이름·주소 검색" autocomplete="off">
+          <div id="station-results" class="station-results">
+            <div class="empty-state">지역을 선택하면 주유소 목록이 표시됩니다.</div>
           </div>
-          <label class="field-label">또는 지역으로 검색</label>
-          <div class="search-row">
-            <select id="region-select" class="field-input">
-              <option value="">지역 선택</option>
-              <option value="01">서울</option>
-              <option value="02">경기</option>
-              <option value="15">인천</option>
-              <option value="03">강원</option>
-              <option value="04">충북</option>
-              <option value="05">충남</option>
-              <option value="19">세종</option>
-              <option value="17">대전</option>
-              <option value="06">전북</option>
-              <option value="20">전남/광주</option>
-              <option value="08">경북</option>
-              <option value="14">대구</option>
-              <option value="09">경남</option>
-              <option value="10">부산</option>
-              <option value="18">울산</option>
-              <option value="11">제주</option>
-            </select>
-            <button type="button" class="btn-icon" id="btn-region" title="지역 검색">🔍</button>
-          </div>
-          <div id="station-results" class="station-results hidden"></div>
+
+          <button type="button" class="btn-secondary btn-nearby-link" id="btn-nearby">📍 내 주변 주유소 불러오기</button>
 
           <div id="selected-station" class="selected-station hidden">
             <div class="station-name" id="sel-station-name"></div>
@@ -239,7 +240,7 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="/js/coord.js"></script>
+  <script src="/js/coord.js" defer></script>
   <script src="/js/sync.js" defer></script>
   <script src="/js/app.js" defer></script>
 </body>
